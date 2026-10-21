@@ -1,25 +1,55 @@
-import requests, json
+"""Detecta emociones en un texto mediante el servicio de análisis."""
+
+import requests
+
+
+URL = (
+    "https://sn-watson-emotion.labs.skills.network/"
+    "v1/watson.runtime.nlp.v1/NlpService/EmotionPredict"
+)
+HEADER = {
+    "grpc-metadata-mm-model-id": (
+        "emotion_aggregated-workflow_lang_en_stock"
+    )
+}
+EMOTIONS = ("anger", "disgust", "fear", "joy", "sadness")
+
+
+def _empty_result():
+    """Devuelve el resultado con todas las emociones sin valor."""
+    return {
+        **{emotion: None for emotion in EMOTIONS},
+        "dominant_emotion": None,
+    }
+
 
 def emotion_detector(text_to_analyze):
-    url = 'https://sn-watson-emotion.labs.skills.network/v1/watson.runtime.nlp.v1/NlpService/EmotionPredict'
-    myobj = { "raw_document": { "text": text_to_analyze } }
-    header = {"grpc-metadata-mm-model-id": "emotion_aggregated-workflow_lang_en_stock"}
-    response = requests.post(url, json=myobj, headers=header)
+    """Devuelve las puntuaciones emocionales y la emoción dominante.
 
-    # Convierte la cadena JSON en un diccionario de Python
-    datos = json.loads(response.text)
+    Si el servicio responde con estado 400, devuelve None para cada valor.
+    """
+    myobj = {"raw_document": {"text": text_to_analyze}}
+    response = requests.post(
+        URL,
+        json=myobj,
+        headers=HEADER,
+        timeout=30,
+    )
 
-    # Obtiene las puntuaciones de la primera predicción
-    emociones = datos["emotionPredictions"][0]["emotion"]
+    if response.status_code == 400:
+        return _empty_result()
 
-    nombres = ["anger", "disgust", "fear", "joy", "sadness"]
-    puntuaciones = {nombre: emociones[nombre] for nombre in nombres}
+    response.raise_for_status()
+    data = response.json()
+    emotions = data["emotionPredictions"][0]["emotion"]
 
-    # Encuentra la emoción con la puntuación más alta
-    emocion_dominante = max(puntuaciones, key=puntuaciones.get)
-
-    # Devuelve el resultado en el formato solicitado
-    return {
-        **puntuaciones,
-        "dominant_emotion": emocion_dominante
+    result = {
+        emotion: emotions[emotion]
+        for emotion in EMOTIONS
     }
+    result["dominant_emotion"] = max(
+        result,
+        key=result.get,
+    )
+
+    return result
